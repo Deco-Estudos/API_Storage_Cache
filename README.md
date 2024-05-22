@@ -1,4 +1,3 @@
-FALTA IMPLEMENTAR O CASH
 
 Para rodar basta executar o código e essa URL: http://localhost:8080/swagger-ui/index.html#/
 
