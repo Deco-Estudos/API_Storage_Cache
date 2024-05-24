@@ -11,8 +11,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.File;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -37,17 +40,47 @@ public class S3Controller {
 
     @GetMapping("/download/{fileName}")
     public void downloadFile(@PathVariable String fileName, HttpServletResponse response) throws IOException {
-        S3Object arquivo = s3Service.getFile(fileName);
-        S3ObjectInputStream arquivo_imagem = arquivo.getObjectContent();
-        response.setContentType("image/jpg");
-        response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
-        OutputStream la = response.getOutputStream();
-        byte[] buffer = new byte[1024];
-        int qtnd;
-        while ((qtnd = arquivo_imagem.read(buffer)) != -1) {
-            la.write(buffer, 0, qtnd);
+        // Verifica se o arquivo está na pasta "imagem_cache"
+        File cachedFile = new File("imagem_cache/" + fileName);
+        if (cachedFile.exists()) {
+            // Se o arquivo estiver na cache, serve o arquivo a partir da cache
+            try (var inputStream = new java.io.FileInputStream(cachedFile);
+                 var outputStream = response.getOutputStream()) {
+                response.setContentType("image/jpg");
+                response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+            }
+        } else {
+            // Se o arquivo não estiver na cache, busca do S3 e salva na cache
+            S3Object arquivo = s3Service.getFile(fileName);
+            S3ObjectInputStream arquivo_imagem = arquivo.getObjectContent();
+
+            // Cria a pasta "imagem_cache" se não existir
+            File cacheDir = new File("imagem_cache");
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs();
+            }
+
+            // Salva o arquivo na pasta "imagem_cache"
+            try (var fileOutputStream = new FileOutputStream(cachedFile);
+                 var responseOutputStream = response.getOutputStream()) {
+                response.setContentType("image/jpg");
+                response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = arquivo_imagem.read(buffer)) != -1) {
+                    fileOutputStream.write(buffer, 0, bytesRead);  // Salva no arquivo
+                    responseOutputStream.write(buffer, 0, bytesRead);  // Envia a resposta
+                }
+            } finally {
+                arquivo_imagem.close();
+            }
         }
-        arquivo_imagem.close();
     }
 
     @GetMapping("/view/{fileName}")
